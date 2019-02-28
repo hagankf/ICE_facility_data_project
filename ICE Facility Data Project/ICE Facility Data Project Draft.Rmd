@@ -23,7 +23,7 @@ library(fs)
 ```
 
 ```{r import and tidy}
-icefacilities<-rio::import(here("ice_facility_list.xlsx"), setclass = "tbl_df") %>%
+icefacilities <- rio::import(here("ice_facility_list.xlsx"), setclass = "tbl_df") %>%
   characterize() #Question for DA: I could read in data sheets separately, though I thought that maybe reading in the whole file would make this more reproducible.
 
 icefacilities <- read_xlsx(here("ice_facility_list.xlsx"), sheet = "Facility List - Main", skip = 8)
@@ -39,7 +39,7 @@ tidyd <- icefacilities %>%
   select(Name, State, year, ADP) #To select just these columns
 ```
 
-```{r viz1, fig.height = 5}
+```{r viz1, fig.height=8, fig.width=7}
 #For a non-specialist audience
 firstgraphdata <- tidyd %>%
   group_by(State, year) %>%
@@ -68,7 +68,7 @@ firstgraphdata %>%
   labs(x = "") +
   #ylim(0,1200) + I tried confining the y-axis to omit the space between state names and related bar
   scale_y_continuous(name = "Average Daily Number of Detainees Statewide") +
-  labs(title = "Number of People in ICE Facilities on a Typical Day in 2018", 
+  labs(title = "Number of People in ICE Facilities on a Typical Day in FY2018", 
        subtitle = "DHS-supplied data on where detainees are held",
        caption = "Data from the [Immigrant Legal Resource Center]
        (https://immigrantjustice.org/ice-detention-facilities-november-2017)")+
@@ -83,15 +83,20 @@ theme_minimal() +
 #I want to make two points in this graph: (1) To draw attention to which states and territories have the most people detained, and which do not have any detainees, and (2) to draw attention to the amount of people for whom a location is not given. So far I think I am kind of splitting the difference between the two message and not yet coming across clearly. Understanding how to interpret the fact that location is redacted for this number of people will help me make this decision.
 ```
 
+1. I changed the figure height because the state labels were too small and I was not able to read it. 
+2. I think the graph clearly communicated the two messages you mention. 
+3. Regarding your comment about the footnote, I added FY right before 2018 in the title to indicate that you are talking about a fiscal year and not a calendar year.  
+
+
 ```{r viz 2}
 #Also potentially for a non-specialist audience 
 secondgraph <- icefacilities %>%
   gather(year, ADP, 22:31) %>%
-  mutate(year = parse_number(year)) %>%
-  mutate(year = 2000 + year) %>%
-  mutate(ADP = as.numeric(ADP)) %>%
+  mutate(year = parse_number(year),
+         year = 2000 + year,
+         ADP = as.numeric(ADP),
   #rename(ICEfundedYN = `ICE Funded`) %>%
-  mutate(ICEfundedYN = as.factor(`ICE Funded`)) %>%
+         ICEfundedYN = as.factor(`ICE Funded`)) %>%
   group_by(year, ICEfundedYN) %>%
   summarize(totalADP = sum(ADP)) %>%
   mutate(ICEfundedYN = fct_recode(ifelse(ICEfundedYN == "Yes", "Funded by ICE", "Other funding source(s)")))
@@ -100,7 +105,7 @@ secondgraph <- icefacilities %>%
 secondgraph %>%  ggplot(aes(year, totalADP, color = ICEfundedYN)) +
   geom_line() +
   labs(x ="") +
-  scale_y_continuous(name = "Average daily population of detainees, nationally") +
+  scale_y_continuous(name = "The Average daily population of detainees, nationally") +
   labs(title = "Number of detainees in ICE-funded facilities has been increasing since 2015", 
        #subtitle = "DHS-supplied data on where detainees are held",
        caption = "Data from the [Immigrant Legal Resource Center]
@@ -114,6 +119,11 @@ theme_minimal() +
   guides(color = "none")
 
 ```
+
+1. I changed the syntax of mutate, but I think it's probably a personal preference for you to have mutate for each column you add. If that's the case, then just reject my suggestion. Otherwise, I think it looks better with one mutate :)
+2. The title of the y axis says Average daily population while the dataset is a sum of averages which is not necessarily the average but a total of averages. I looked into the data to see if there is way you can actually calculate the average but we don't know the total number based on which they calculated ADP so that's not an option. I suggest that you just make that clear in the title and maybe add a footnote to clarify that is it not an average. 
+
+
 ```{r viz 3}
 icefacilities2 <- read_xlsx(here("ice_facility_list.xlsx"), sheet = "Authorized List - DMCP Detailed", skip = 7)
 
@@ -140,11 +150,26 @@ thirdgraph_levelup <- icefacilities %>%
   gather(genderC_YN, sum, 3:6) %>%
   separate(genderC_YN, c("gender", "crimYN"), sep = "_")
 
-thirdgraph_levelup  %>% ggplot(aes(crimYN, sum)) +
+thirdgraph_levelup  %>% ggplot(aes(crimYN,sum)) +
   geom_col(aes(fill = gender))
+  
+
+thirdgraph_levelup  %>% ggplot(aes(crimYN,sum)) +
+  geom_jitter(aes(color = gender))+
+  scale_color_OkabeIto()+
+  theme_minimal()
+
+thirdgraph_levelup  %>% ggplot(aes(crimYN,sum)) +
+  geom_jitter(aes(color = gender))+
+  scale_color_OkabeIto()+
+  theme_minimal()+
+  scale_y_log10()
+  
 
 #This represents an improvement but it includes more facilities. I tried facet-ing by facility type but am thinking that since the distinctions between the facility types are not entirely clear, this just muddies the waters.
 ```
+
+I spent a good amount of time thinking about this figure because I think the message is very important and needs to be communicated clearly. But then looking into the data and vizualisation back and forth made me thin that the geom_col is probably not the right choice here as it does not really show the sum value. So I tried geom_point and it was closer to what I have seen in the data. Then I moved to geom_jitter to get an even better representation of the data. The two vizs I added above show my suggestion and with and without a logged y scale given that most of the sum value are concentrated around the minimal values. I hope this comminicate the message better and that it was not just because of my misunderstanding of your message.   
 
 ```{r v4}
 
@@ -163,8 +188,27 @@ thirdgraph_levelupmost %>% ggplot(aes(threatlevel, sum)) +
   labs(title = "Most Detainees Present Zero Threat", 
        subtitle = "FY '18 detainees by threat level and detention site type") +
   theme(plot.background = element_rect(fill = "transparent", colour = NA))
+  
+
+thirdgraph_levelupmost %>% ggplot(aes(threatlevel, sum)) +
+  geom_col(aes(fill = type), show.legend = FALSE) +
+  labs(x = "ICE Threat Level (0 indicates no threat)") +
+  scale_y_continuous(name = "Detainees in 2018") +
+  labs(title = "Most Detainees Present Zero Threat", 
+       subtitle = "FY '18 detainees by threat level and detention site type*",
+       caption = "*The other dentention sites types (BOP, MIRP, and others) all have 0 or close to 0 number of detainees.") +
+  theme(plot.background = element_rect(fill = "transparent", colour = NA))+
+  scale_fill_OkabeIto()+
+  annotate("label", x = 1, y = 2000, label = "USMS IGA")+
+  annotate("label", x = 1, y = 4380, label = "SPC")+
+  annotate("label", x = 1, y = 8000, label = "ORR")+
+  annotate("label", x = 1, y = 16000, label = "IGSA")+
+  annotate("label", x = 1, y = 23500, label = "CDF")+
+  theme_minimal()
 
 ```
+
+I think this figure is great, I just changed the theme and colors to make it more color blind friendly. I am thinking that the legend could probably be more optimized given that only 4 types are represented in the figure. Maybe you can add their in the figure by annotating it and add a footnote that the other types are all equal and close to 0. The figure suggested above show all my suggestions to make the visualization better. I hope you like it :)
 
 ```{r viz 5}
 fourthplot <- icefacilities %>%
@@ -188,17 +232,19 @@ fourthplot %>% ggplot(aes(perdiem_gross, fy18avgdetentionperiod)) +
 #Reason 2: The scatterplot was in many ways a shot in the dark, and I was then curious about the facilities that seem to have, on average, higher lengths of stay. IGSA here stands for Intergovernmental Service Agreement, and USMS IGA stands for United States Marshal Service Intergovernmental Agreement. I am not very committed to this as an explanatory or interesting category and will consider other facility-level variables to color by. 
 ```
 
+I think it's a really good start and communicates the message in a good way. I did not want to add any tweeks as this is still in progress in terms of the plot itself but I see a high concentration of points at lower values so I am thinking maybe a logged scale would work in this case.
+
 ```{r v6}
 
 #Very very preliminary graph, hoping to examine whether average length of stay is changing ove time
 str(icefacilities)
 alosgraph <- icefacilities %>%
   gather(year, alos, 45:48) %>% #ALOS is average length of stay
-  mutate(year = parse_number(year)) %>%
-  mutate(year = 2000 + year) %>%
-  mutate(alos = as.numeric(alos)) %>%
+  mutate(year = parse_number(year),
+         year = 2000 + year,
+         alos = as.numeric(alos),
   #rename(ICEfundedYN = `ICE Funded`) %>%
-  mutate(ICEfundedYN = as.factor(`ICE Funded`)) %>%
+         ICEfundedYN = as.factor(`ICE Funded`)) %>%
   group_by(year, ICEfundedYN) %>%
   summarize(totalADP = sum(ADP)) %>%
   mutate(ICEfundedYN = fct_recode(ifelse(ICEfundedYN == "Yes", "Funded by ICE", "Other funding source(s)")))
@@ -207,4 +253,21 @@ alosgraph %>%
   ggplot(aes(year, alos)) +
   geom_point()
 
+alosgraph0 <- icefacilities %>%
+  gather(year, alos, 45:48) %>% #ALOS is average length of stay
+  mutate(year = parse_number(year),
+         year = 2000 + year,
+         alos = as.numeric(alos),
+  #rename(ICEfundedYN = `ICE Funded`) %>%
+         ICEfundedYN = as.factor(`ICE Funded`)) 
+  
+
+alosgraph0 %>%
+  ggplot(aes(year, alos)) +
+  geom_point()
+
 ```
+
+As you mentioned in the comment, this is very preliminary graph. I am not sure I understand exactly what you intend to communicate here. The dataset alosgraph still have some errors. I tried to remove the last 3 lines of the code and change the mutate syntax like what I did above, to see what the graph looks like. There are many tweaks that I can suggest for this graph but I am really not sure what the message is so I will just stop here and I will be more than happy to review this even after the assignement if you can breifly explain the intended message and audience here. 
+
+
