@@ -1,0 +1,210 @@
+---
+title: "KHagan ICE Data Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lubridate)
+library(tidyverse)
+library(forcats)
+library(rio)
+library(here)
+library(colorblindr)
+library(gghighlight)
+library(maps)
+library(mapdata)
+
+library(knitr)
+library(tidyr)
+library(readr)
+library(purrr)
+library(readxl)
+library(fs)
+```
+
+```{r import and tidy}
+icefacilities<-rio::import(here("ice_facility_list.xlsx"), setclass = "tbl_df") %>%
+  characterize() #Question for DA: I could read in data sheets separately, though I thought that maybe reading in the whole file would make this more reproducible.
+
+icefacilities <- read_xlsx(here("ice_facility_list.xlsx"), sheet = "Facility List - Main", skip = 8)
+
+View(icefacilities)
+str(icefacilities)
+
+#Data in ice facilities is not tidy. Notice that columns for fiscal years have both the year in the column title. 
+tidyd <- icefacilities %>%
+  gather(year, ADP, matches("^FY\\d\\d ADP")) %>%
+  mutate(year = parse_number(year),
+         year = 2000 + year) %>% #To make the years 2018, for example, rather than 18
+  select(Name, State, year, ADP) #To select just these columns
+```
+
+```{r viz1, fig.height = 5}
+#For a non-specialist audience
+firstgraphdata <- tidyd %>%
+  group_by(State, year) %>%
+  summarize(total_ADP = sum(as.numeric(ADP))) %>%
+  filter(year == 2018) %>%
+  ungroup() 
+
+State<-unique(firstgraphdata$State)
+label_color <- ifelse(State == "Redacted", 
+                "red",
+                "black")
+label_color
+
+label_face <- ifelse(State == "Redacted", 
+                "bold",
+                "plain")
+label_face
+
+firstgraphdata %>%
+  ggplot(aes(fct_reorder(State, total_ADP), total_ADP)) + #This calls count
+  geom_col() +
+  geom_col(data = filter(firstgraphdata,
+                           State == "Redacted"),
+           fill = "red") +
+  coord_flip() +
+  labs(x = "") +
+  #ylim(0,1200) + I tried confining the y-axis to omit the space between state names and related bar
+  scale_y_continuous(name = "Average Daily Number of Detainees Statewide") +
+  labs(title = "Number of People in ICE Facilities on a Typical Day in 2018", 
+       subtitle = "DHS-supplied data on where detainees are held",
+       caption = "Data from the [Immigrant Legal Resource Center]
+       (https://immigrantjustice.org/ice-detention-facilities-november-2017)")+
+  theme(plot.background = element_rect(fill = "transparent", colour = NA)) +
+theme_minimal() +
+   theme(axis.text.x = element_text(color = label_color,
+                                  face = label_face))
+
+#Planning to continue to work on caption so that I can hyperlink the Immigrant Legal Resource Center so that user can go directly to source of the data
+#I am considering adding a footnote to clarify that 2018 in this case means Fiscal Year 2018
+#I also want to change the abbreviations for state names and U.S. territories to the full name. I may try doing this through a join. 
+#I want to make two points in this graph: (1) To draw attention to which states and territories have the most people detained, and which do not have any detainees, and (2) to draw attention to the amount of people for whom a location is not given. So far I think I am kind of splitting the difference between the two message and not yet coming across clearly. Understanding how to interpret the fact that location is redacted for this number of people will help me make this decision.
+```
+
+```{r viz 2}
+#Also potentially for a non-specialist audience 
+secondgraph <- icefacilities %>%
+  gather(year, ADP, 22:31) %>%
+  mutate(year = parse_number(year)) %>%
+  mutate(year = 2000 + year) %>%
+  mutate(ADP = as.numeric(ADP)) %>%
+  #rename(ICEfundedYN = `ICE Funded`) %>%
+  mutate(ICEfundedYN = as.factor(`ICE Funded`)) %>%
+  group_by(year, ICEfundedYN) %>%
+  summarize(totalADP = sum(ADP)) %>%
+  mutate(ICEfundedYN = fct_recode(ifelse(ICEfundedYN == "Yes", "Funded by ICE", "Other funding source(s)")))
+                                  
+
+secondgraph %>%  ggplot(aes(year, totalADP, color = ICEfundedYN)) +
+  geom_line() +
+  labs(x ="") +
+  scale_y_continuous(name = "Average daily population of detainees, nationally") +
+  labs(title = "Number of detainees in ICE-funded facilities has been increasing since 2015", 
+       #subtitle = "DHS-supplied data on where detainees are held",
+       caption = "Data from the [Immigrant Legal Resource Center]
+       (https://immigrantjustice.org/ice-detention-facilities-november-2017)")+
+  theme(plot.background = element_rect(fill = "transparent", colour = NA)) +
+theme_minimal() +
+  geom_text(data = filter(secondgraph, year == "2011"),
+            aes(y = totalADP, label = ICEfundedYN), 
+            #nudge_x = 1) +
+            vjust = -1.1)+
+  guides(color = "none")
+
+```
+```{r viz 3}
+icefacilities2 <- read_xlsx(here("ice_facility_list.xlsx"), sheet = "Authorized List - DMCP Detailed", skip = 7)
+
+#First iteration
+thirdgraphd <- icefacilities2 %>%
+  mutate(type = as.factor(Type)) %>%
+  rename(male_crim =`Male Crim`, male_noncrim = `Male Non-Crim`, female_crim = `Female Crim`, female_noncrim = `Female Non-Crim`) %>%
+  mutate(totalfemales = female_crim + female_noncrim, totalmales = male_crim + male_noncrim) %>%
+  select(type, male_crim, male_noncrim, female_crim, female_noncrim, totalfemales, totalmales) %>%
+  gather(genderC_YN, sum, 2:5) %>%
+  separate(genderC_YN, c("gender", "crimYN"), sep = "_") 
+  
+thirdgraphd %>% ggplot(aes(crimYN, sum)) +
+  geom_col(aes(fill = gender)) +
+  facet_wrap(~type)
+
+#The above is data from a list of facilities authorized through the Detention Management Control Program. It does not include facilities that fall under the Office of Refugee Resettlement or facilities where families are held. For this reason I am looking to another tab in the original Excel sheet that has a more inclusive list of facilities.
+
+#Second iteration
+thirdgraph_levelup <- icefacilities %>%
+  mutate(type = as.factor(Type)) %>%
+  rename(male_crim =`Male Crim`, male_noncrim = `Male Non-Crim`, female_crim = `Female Crim`, female_noncrim = `Female Non-Crim`) %>%
+  select(Name, type, male_crim, male_noncrim, female_crim, female_noncrim) %>%
+  gather(genderC_YN, sum, 3:6) %>%
+  separate(genderC_YN, c("gender", "crimYN"), sep = "_")
+
+thirdgraph_levelup  %>% ggplot(aes(crimYN, sum)) +
+  geom_col(aes(fill = gender))
+
+#This represents an improvement but it includes more facilities. I tried facet-ing by facility type but am thinking that since the distinctions between the facility types are not entirely clear, this just muddies the waters.
+```
+
+```{r v4}
+
+thirdgraph_levelupmost <- icefacilities %>%
+  mutate(type = as.factor(Type)) %>%
+  rename(male_crim =`Male Crim`, male_noncrim = `Male Non-Crim`, female_crim = `Female Crim`, female_noncrim = `Female Non-Crim`) %>%
+  rename(threatlevel_1 = `ICE Threat Level 1`, threatlevel_2 = `ICE Threat Level 2`, threatlevel_3 = `ICE Threat Level 3`, threatlevel_0 = `No ICE Threat Level`) %>%
+  select(type, male_crim, male_noncrim, female_crim, female_noncrim, threatlevel_1, threatlevel_2, threatlevel_3, threatlevel_0) %>%
+  gather(threatlevel, sum, 6:9) %>%
+  mutate(threatlevel = as.factor(parse_number(threatlevel)))
+
+thirdgraph_levelupmost %>% ggplot(aes(threatlevel, sum)) +
+  geom_col(aes(fill = type)) +
+  labs(x = "ICE Threat Level (0 indicates no threat)") +
+  scale_y_continuous(name = "Detainees in 2018") +
+  labs(title = "Most Detainees Present Zero Threat", 
+       subtitle = "FY '18 detainees by threat level and detention site type") +
+  theme(plot.background = element_rect(fill = "transparent", colour = NA))
+
+```
+
+```{r viz 5}
+fourthplot <- icefacilities %>%
+  mutate(ICEfundedYN = as.factor(`ICE Funded`)) %>%
+  filter(ICEfundedYN == "Yes") %>%
+  filter(`Per Diem Rate Detailed` != "NA") %>%
+  filter(`Per Diem Rate Detailed` != "b)(4)") %>%
+  mutate(perdiem_gross = parse_number(`Per Diem Rate Detailed`)) %>%
+  mutate(fy18avgdetentionperiod = as.numeric(`FY18 ALOS`)) 
+
+fourthplot %>% ggplot(aes(perdiem_gross, fy18avgdetentionperiod)) +
+  geom_point(aes(color = Type)) +
+  scale_x_continuous(limits = c(0, 200),
+                     labels = scales::dollar,
+                     name = "Estimate of Facility Per-Diem Rate per Detainee") +
+   scale_y_continuous(name = "Average Length of Detention") +
+  labs(title = "Is there evidence that per-diem rate motivates duration of detention?")
+
+#This plot is really a work in progress for a few reasons:
+#Reason 1: There are some ambiguities in a small number of the "Per Diem Rate Detailed" values that should be resolved before having greater confidence in the per-diem rate variable. For examples, 102 out of 1685 records have b)(4) in the per-diem rate columns, and I have not yet been able to figure out what this means, even after reviewing documents accompanying the Department of Homeland Security's response to the FOIA request
+#Reason 2: The scatterplot was in many ways a shot in the dark, and I was then curious about the facilities that seem to have, on average, higher lengths of stay. IGSA here stands for Intergovernmental Service Agreement, and USMS IGA stands for United States Marshal Service Intergovernmental Agreement. I am not very committed to this as an explanatory or interesting category and will consider other facility-level variables to color by. 
+```
+
+```{r v6}
+
+#Very very preliminary graph, hoping to examine whether average length of stay is changing ove time
+str(icefacilities)
+alosgraph <- icefacilities %>%
+  gather(year, alos, 45:48) %>% #ALOS is average length of stay
+  mutate(year = parse_number(year)) %>%
+  mutate(year = 2000 + year) %>%
+  mutate(alos = as.numeric(alos)) %>%
+  #rename(ICEfundedYN = `ICE Funded`) %>%
+  mutate(ICEfundedYN = as.factor(`ICE Funded`)) %>%
+  group_by(year, ICEfundedYN) %>%
+  summarize(totalADP = sum(ADP)) %>%
+  mutate(ICEfundedYN = fct_recode(ifelse(ICEfundedYN == "Yes", "Funded by ICE", "Other funding source(s)")))
+
+alosgraph %>%
+  ggplot(aes(year, alos)) +
+  geom_point()
+
+```
