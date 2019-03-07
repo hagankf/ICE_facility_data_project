@@ -10,6 +10,7 @@ library(forcats)
 library(rio)
 library(here)
 library(colorblindr)
+# for some strange reason, this pacakge is not available for R 3.4.3 : ( - Xi
 library(gghighlight)
 library(maps)
 library(mapdata)
@@ -26,6 +27,7 @@ library(fs)
 icefacilities<-rio::import(here("ice_facility_list.xlsx"), setclass = "tbl_df") %>%
   characterize() #Question for DA: I could read in data sheets separately, though I thought that maybe reading in the whole file would make this more reproducible.
 
+# Dear Katherine, just double checking because I see two icefacilities dataset here. Could it be better that we comment one out? - Xi
 icefacilities <- read_xlsx(here("ice_facility_list.xlsx"), sheet = "Facility List - Main", skip = 8)
 
 View(icefacilities)
@@ -37,6 +39,8 @@ tidyd <- icefacilities %>%
   mutate(year = parse_number(year),
          year = 2000 + year) %>% #To make the years 2018, for example, rather than 18
   select(Name, State, year, ADP) #To select just these columns
+
+# Many warning messages pop up on my screen. Will it be better that we modify the YAML or the setting for this chuck to hide the warning messages? - Xi
 ```
 
 ```{r viz1, fig.height = 5}
@@ -81,6 +85,8 @@ theme_minimal() +
 #I am considering adding a footnote to clarify that 2018 in this case means Fiscal Year 2018
 #I also want to change the abbreviations for state names and U.S. territories to the full name. I may try doing this through a join. 
 #I want to make two points in this graph: (1) To draw attention to which states and territories have the most people detained, and which do not have any detainees, and (2) to draw attention to the amount of people for whom a location is not given. So far I think I am kind of splitting the difference between the two message and not yet coming across clearly. Understanding how to interpret the fact that location is redacted for this number of people will help me make this decision.
+
+# I really appreciate these very detailed notes! The plot looks elegant. Maybe it's my monitor's resolution. Do you think it will be more ideal we shrink the x axis font to make the labels more readable? - Xi
 ```
 
 ```{r viz 2}
@@ -144,6 +150,7 @@ thirdgraph_levelup  %>% ggplot(aes(crimYN, sum)) +
   geom_col(aes(fill = gender))
 
 #This represents an improvement but it includes more facilities. I tried facet-ing by facility type but am thinking that since the distinctions between the facility types are not entirely clear, this just muddies the waters.
+# sounds reasonable. Xi
 ```
 
 ```{r v4}
@@ -164,6 +171,7 @@ thirdgraph_levelupmost %>% ggplot(aes(threatlevel, sum)) +
        subtitle = "FY '18 detainees by threat level and detention site type") +
   theme(plot.background = element_rect(fill = "transparent", colour = NA))
 
+# pretty bar plot! And it's great that the data presented here does not make it difficult to compare across stacked types. 
 ```
 
 ```{r viz 5}
@@ -207,4 +215,5 @@ alosgraph %>%
   ggplot(aes(year, alos)) +
   geom_point()
 
+# For some strange reason, I got an error saying that object 'ADP' was not found. - Xi
 ```
